@@ -84,18 +84,24 @@ def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
     
     print("[+] جاري معالجة الفيديو في D-ID...")
     import time
-    while True:
-        res = requests.get(status_url, headers=headers).json()
-        if res.get("status") == "done":
-            video_url = res.get("result_url")
-            video_data = requests.get(video_url).content
-            with open(output_path, 'wb') as f:
-                f.write(video_data)
-            validate_file(output_path, "فيديو الشخصية الخام")
-            break
-        elif res.get("status") == "error":
-            raise Exception("فشل توليد فيديو الشخصية من المصدر.")
-        time.sleep(5)
+import google.generativeai as genai
+
+# استخدم هذا النموذج المستقر
+model = genai.GenerativeModel('gemini-1.5-pro')
+
+def generate_financial_script():
+    prompt = "اكتب النص المالي المخصص هنا..."
+    for attempt in range(3):
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                print(f"Waiting for rate limit... Attempt {attempt + 1}")
+                time.sleep(20) # انتظار 20 ثانية قبل إعادة المحاولة
+            else:
+                raise e
+    raise Exception("Failed after 3 retries due to rate limit.")
 
 # ==========================================
 # 4. المونتاج وإضافة الترجمة
