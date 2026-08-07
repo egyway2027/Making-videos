@@ -41,7 +41,7 @@ def generate_financial_script():
     بدون ملاحظات إخراجية. أخرج النتيجة بصيغة JSON فقط:
     {"title": "العنوان", "script": "النص", "tags": ["#هاشتاج"]}
     """
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
     response = model.generate_content(prompt)
     clean_json = response.text.replace("```json", "").replace("```", "").strip()
     return json.loads(clean_json)
