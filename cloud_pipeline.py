@@ -3,7 +3,12 @@ import asyncio
 import requests
 import json
 import edge_tts
-import google.generativeai as genai
+import os
+import time
+from google import genai
+
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
