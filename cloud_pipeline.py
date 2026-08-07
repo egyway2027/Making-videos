@@ -31,20 +31,30 @@ def validate_file(file_path: str, file_type: str):
 # ==========================================
 # 1. توليد السكريبت المالي
 # ==========================================
+import os
+import time
+from google import genai
+
+# إنشاء العميل باستخدام المفتاح السري
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
 def generate_financial_script():
-    prompt = """
-    أنت صانع محتوى مالي وخبير استثماري، أسلوبك يناقش الوعي المالي، أخطاء تضييع المال، وقواعد الاستثمار بذكاء.
-    اكتب سكريبت فيديو قصير مدته 30 ثانية بالعامية المصرية الراقية.
-    1. الهوك: جملة صادمة في أول سطر تحذر من خطأ مالي شائع.
-    2. المحتوى: نصيحة مالية مركزة بأرقام مقنعة.
-    3. الخاتمة: سؤال ذكي للمشاهد عن خطته المالية.
-    بدون ملاحظات إخراجية. أخرج النتيجة بصيغة JSON فقط:
-    {"title": "العنوان", "script": "النص", "tags": ["#هاشتاج"]}
-    """
-    model = genai.GenerativeModel('gemini-2.0-flash')
-    response = model.generate_content(prompt)
-    clean_json = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean_json)
+    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي."
+    
+    # آلية المحاولة والتغلب على الضغط
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            print(f"المحاولة رقم {attempt + 1} فشلت: {e}")
+            time.sleep(15)
+            
+    raise Exception("فشل توليد النص بعد 3 محاولات بسبب قيود الـ API")
+
 
 # ==========================================
 # 2. توليد الصوت وإرفاقه سحابياً
