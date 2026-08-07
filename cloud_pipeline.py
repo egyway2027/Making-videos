@@ -1,17 +1,12 @@
 import os
 import asyncio
 import requests
-import json
-import edge_tts
-import os
 import time
+import edge_tts
 from google import genai
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
+# التحديث الجديد: استدعاء MoviePy للإصدار 2.0+ (بدون .editor)
+from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 # ==========================================
 # إعدادات البيئة السحابية
@@ -20,13 +15,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DID_API_KEY = os.getenv("DID_API_KEY")
 AVATAR_IMAGE_URL = os.getenv("AVATAR_IMAGE_URL")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
 # دالة الحماية وفحص الملفات
 # ==========================================
 def validate_file(file_path: str, file_type: str):
-    """التحقق من وجود الملف وأن حجمه أكبر من صفر بايت لتجنب الأخطاء"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"خطأ: ملف {file_type} ({file_path}) غير موجود.")
     if os.path.getsize(file_path) == 0:
@@ -36,42 +30,29 @@ def validate_file(file_path: str, file_type: str):
 # ==========================================
 # 1. توليد السكريبت المالي
 # ==========================================
-import os
-import time
-from google import genai
-
-# إنشاء العميل باستخدام المفتاح السري
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
 def generate_financial_script():
-    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي."
-    
-    # آلية المحاولة والتغلب على الضغط
+    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار. أريد النص المنطوق فقط بدون عناوين."
     for attempt in range(3):
         try:
             response = client.models.generate_content(
                 model='gemini-2.0-flash',
                 contents=prompt,
             )
-            return response.text
+            return response.text.strip()
         except Exception as e:
             print(f"المحاولة رقم {attempt + 1} فشلت: {e}")
             time.sleep(15)
-            
-    raise Exception("فشل توليد النص بعد 3 محاولات بسبب قيود الـ API")
-
+    raise Exception("فشل توليد النص من Gemini بعد 3 محاولات.")
 
 # ==========================================
 # 2. توليد الصوت وإرفاقه سحابياً
 # ==========================================
 async def generate_audio(text: str, output_path: str):
-    # استخدام صوت مصري واثق ومناسب للمحتوى المالي
     communicate = edge_tts.Communicate(text, "ar-EG-ShakirNeural", rate="+10%")
     await communicate.save(output_path)
     validate_file(output_path, "الصوت")
 
 def upload_temp_audio(file_path: str) -> str:
-    """رفع الصوت مؤقتاً لتمكين D-ID من قراءته سحابياً"""
     with open(file_path, 'rb') as f:
         response = requests.post('https://file.io', files={'file': f})
     if response.status_code == 200:
@@ -97,37 +78,42 @@ def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
     talk_id = response.json().get("id")
     status_url = f"https://api.d-id.com/talks/{talk_id}"
     
-    print("[+] جاري معالجة الفيديو في D-ID...")
-    import time
-import google.generativeai as genai
-
-# استخدم هذا النموذج المستقر
-model = genai.GenerativeModel('gemini-1.5-pro')
-
-def generate_financial_script():
-    prompt = "اكتب النص المالي المخصص هنا..."
-    for attempt in range(3):
-        try:
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print(f"Waiting for rate limit... Attempt {attempt + 1}")
-                time.sleep(20) # انتظار 20 ثانية قبل إعادة المحاولة
-            else:
-                raise e
-    raise Exception("Failed after 3 retries due to rate limit.")
+    print("[+] جاري معالجة الفيديو في D-ID (يرجى الانتظار، قد يستغرق دقيقة)...")
+    
+    # حلقة آلية للانتظار حتى انتهاء رندرة الفيديو في سيرفرات D-ID
+    while True:
+        status_response = requests.get(status_url, headers=headers)
+        status_data = status_response.json()
+        status = status_data.get("status")
+        
+        if status == "done":
+            print("[+] اكتملت المعالجة بنجاح! جاري تنزيل الفيديو الخام...")
+            vid_url = status_data.get("result_url")
+            vid_resp = requests.get(vid_url)
+            with open(output_path, 'wb') as f:
+                f.write(vid_resp.content)
+            validate_file(output_path, "الفيديو الخام")
+            break
+        elif status == "error":
+            raise Exception(f"خطأ في معالجة D-ID: {status_data}")
+        
+        time.sleep(10)
 
 # ==========================================
-# 4. المونتاج وإضافة الترجمة
+# 4. المونتاج وإضافة الترجمة (MoviePy v2)
 # ==========================================
 def process_video(raw_video: str, text_overlay: str, final_output: str):
     clip = VideoFileClip(raw_video)
+    
     txt_clip = TextClip(
-        text_overlay[:30] + "...", # عرض جزء تشويقي من النص
-        fontsize=40, color='yellow', font='Arial-Bold', bg_color='black',
-        size=(clip.w * 0.9, None), method='caption'
-    ).set_duration(clip.duration).set_position(('center', 'bottom'))
+        text=text_overlay[:40] + "...", # عرض عينة تشويقية
+        font='Arial', 
+        font_size=40, 
+        color='yellow', 
+        bg_color='black',
+        method='caption',
+        size=(int(clip.w * 0.9), None)
+    ).with_duration(clip.duration).with_position(('center', 'bottom'))
     
     final_clip = CompositeVideoClip([clip, txt_clip])
     final_clip.write_videofile(final_output, codec="libx264", audio_codec="aac", fps=24)
@@ -138,17 +124,18 @@ def process_video(raw_video: str, text_overlay: str, final_output: str):
 # ==========================================
 async def main():
     print("--- بدء الأتمتة المالية ---")
-    data = generate_financial_script()
-    print(f"[+] الموضوع اليوم: {data['title']}")
     
-    await generate_audio(data['script'], "audio.mp3")
+    script_text = generate_financial_script()
+    print(f"[+] النص المولد:\n{script_text}\n")
+    
+    await generate_audio(script_text, "audio.mp3")
     temp_audio_url = upload_temp_audio("audio.mp3")
     print("[+] تم رفع الصوت للسيرفر الوسيط بنجاح.")
     
     generate_avatar_video(temp_audio_url, AVATAR_IMAGE_URL, "raw_video.mp4")
-    process_video("raw_video.mp4", data['script'], "final_video.mp4")
+    process_video("raw_video.mp4", script_text, "final_video.mp4")
     
-    print("[✓] تم الانتهاء من تصدير الفيديو النهائي. (تم تجاوز دالة الرفع ليوتيوب لحين إضافة ملف التوكن الخاص بك)")
+    print("[✓] تم الانتهاء من تصدير الفيديو النهائي بنجاح!")
 
 if __name__ == "__main__":
     asyncio.run(main())
