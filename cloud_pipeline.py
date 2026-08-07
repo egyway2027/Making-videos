@@ -5,7 +5,7 @@ import time
 import edge_tts
 from google import genai
 
-# التحديث الجديد: استدعاء MoviePy للإصدار 2.0+ (بدون .editor)
+# التحديث الجديد: استدعاء MoviePy للإصدار 2.0+
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 # ==========================================
@@ -28,14 +28,14 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي
+# 1. توليد السكريبت المالي (معدل للنسخة المجانية)
 # ==========================================
 def generate_financial_script():
     prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار. أريد النص المنطوق فقط بدون عناوين."
     for attempt in range(3):
         try:
             response = client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-1.5-flash',
                 contents=prompt,
             )
             return response.text.strip()
@@ -106,7 +106,7 @@ def process_video(raw_video: str, text_overlay: str, final_output: str):
     clip = VideoFileClip(raw_video)
     
     txt_clip = TextClip(
-        text=text_overlay[:40] + "...", # عرض عينة تشويقية
+        text=text_overlay[:40] + "...", 
         font='Arial', 
         font_size=40, 
         color='yellow', 
