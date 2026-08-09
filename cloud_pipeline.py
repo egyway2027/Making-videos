@@ -23,12 +23,11 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي (تجربة نشطة واستبدال آلي)
+# 1. توليد السكريبت المالي
 # ==========================================
 def generate_financial_script():
     prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط بدون عناوين."
     
-    # قائمة احتياطية بالنماذج المعتمدة مرتبة حسب الأحدث والأكثر استقراراً
     candidate_models = [
         "gemini-2.0-flash",
         "gemini-1.5-flash",
@@ -37,7 +36,6 @@ def generate_financial_script():
         "gemini-pro"
     ]
     
-    # جلب النماذج المتاحة ديناميكياً وإضافتها للقائمة
     try:
         list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
         resp = requests.get(list_url)
@@ -48,14 +46,12 @@ def generate_financial_script():
                 if 'generateContent' in m.get('supportedGenerationMethods', []) and raw_name not in candidate_models:
                     candidate_models.append(raw_name)
     except Exception as e:
-        print(f"[!] تنبيه: لم يتم جلب القائمة الديناميكية، سيتم الاعتماد على القائمة القياسية: {e}")
+        print(f"[!] تنبيه: اعتمدنا على القائمة القياسية: {e}")
 
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    # تجربة النماذج واحداً تلو الآخر حتى ينجح أحدهم
     for model_name in candidate_models:
-        # استبعاد النماذج القديمة الموقوفة صراحة من جوجل
         if "2.5" in model_name:
             continue
             
@@ -81,7 +77,7 @@ def generate_financial_script():
     raise Exception("فشل توليد النص بعد تجربة كافة النماذج المتاحة لمفتاحك.")
 
 # ==========================================
-# 2. توليد الصوت وإرفاقه سحابياً
+# 2. توليد الصوت ورفعه سحابياً (مع البدائل المباشرة)
 # ==========================================
 async def generate_audio(text: str, output_path: str):
     communicate = edge_tts.Communicate(text, "ar-EG-ShakirNeural", rate="+10%")
@@ -89,11 +85,42 @@ async def generate_audio(text: str, output_path: str):
     validate_file(output_path, "الصوت")
 
 def upload_temp_audio(file_path: str) -> str:
-    with open(file_path, 'rb') as f:
-        response = requests.post('https://file.io', files={'file': f})
-    if response.status_code == 200:
-        return response.json()['link']
-    raise Exception("فشل رفع الصوت المؤقت للسيرفر الوسيط.")
+    # المحاولة الأولى: Tmpfiles.org (مع تحويل الرابط لمباشر)
+    try:
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://tmpfiles.org/api/v1/upload', files={'file': f})
+        if response.status_code == 200:
+            data = response.json()
+            raw_url = data['data']['url']
+            direct_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+            print(f"[+] تم رفع الصوت بنجاح عبر Tmpfiles: {direct_url}")
+            return direct_url
+    except Exception as e:
+        print(f"[-] فشل Tmpfiles: {e}")
+
+    # المحاولة الثانية: Catbox.moe
+    try:
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://catbox.moe/user/api.php', data={'reqtype': 'fileupload'}, files={'fileToUpload': f})
+        if response.status_code == 200 and response.text.startswith('http'):
+            direct_url = response.text.strip()
+            print(f"[+] تم رفع الصوت بنجاح عبر Catbox: {direct_url}")
+            return direct_url
+    except Exception as e:
+        print(f"[-] فشل Catbox: {e}")
+
+    # المحاولة الثالثة: File.io
+    try:
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://file.io', files={'file': f})
+        if response.status_code == 200:
+            direct_url = response.json()['link']
+            print(f"[+] تم رفع الصوت بنجاح عبر File.io: {direct_url}")
+            return direct_url
+    except Exception as e:
+        print(f"[-] فشل File.io: {e}")
+
+    raise Exception("فشل رفع الصوت المؤقت على جميع السيرفرات.")
 
 # ==========================================
 # 3. تحريك الشخصية (D-ID)
@@ -114,7 +141,7 @@ def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
     talk_id = response.json().get("id")
     status_url = f"https://api.d-id.com/talks/{talk_id}"
     
-    print("[+] جاري معالجة الفيديو في D-ID (يرجى الانتظار، قد يستغرق دقيقة)...")
+    print("[+] جاري معالجة الفيديو في D-ID (يرجى الانتظار دقيقة)...")
     
     while True:
         status_response = requests.get(status_url, headers=headers)
@@ -165,7 +192,7 @@ async def main():
     
     await generate_audio(script_text, "audio.mp3")
     temp_audio_url = upload_temp_audio("audio.mp3")
-    print("[+] تم رفع الصوت للسيرفر الوسيط بنجاح.")
+    print(f"[+] رابط الصوت الجاهز للإنتاج: {temp_audio_url}")
     
     generate_avatar_video(temp_audio_url, AVATAR_IMAGE_URL, "raw_video.mp4")
     process_video("raw_video.mp4", script_text, "final_video.mp4")
