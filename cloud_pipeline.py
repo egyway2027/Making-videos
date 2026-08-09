@@ -23,61 +23,62 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي (ديناميكي وذكي)
+# 1. توليد السكريبت المالي (تجربة نشطة واستبدال آلي)
 # ==========================================
 def generate_financial_script():
-    print("[+] جاري فحص النماذج المتاحة لمفتاحك...")
-    list_models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط بدون عناوين."
     
+    # قائمة احتياطية بالنماذج المعتمدة مرتبة حسب الأحدث والأكثر استقراراً
+    candidate_models = [
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro",
+        "gemini-pro"
+    ]
+    
+    # جلب النماذج المتاحة ديناميكياً وإضافتها للقائمة
     try:
-        models_response = requests.get(list_models_url)
-        models_data = models_response.json()
-        
-        if models_response.status_code != 200:
-            raise Exception(f"فشل جلب قائمة النماذج. تأكد من تفعيل الخدمة في حسابك. التفاصيل: {models_data}")
-            
-        available_models = models_data.get('models', [])
-        target_model = None
-        
-        # البحث عن أول نموذج متاح يدعم توليد النصوص
-        for model in available_models:
-            if 'generateContent' in model.get('supportedGenerationMethods', []) and 'vision' not in model.get('name', ''):
-                target_model = model['name']
-                break
-                
-        if not target_model:
-            raise Exception("لم يتم العثور على أي نموذج لتوليد النصوص مسموح به لهذا المفتاح.")
-            
-        print(f"[+] تم التقاط النموذج الصالح تلقائياً: {target_model}")
-        
+        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        resp = requests.get(list_url)
+        if resp.status_code == 200:
+            fetched_models = resp.json().get('models', [])
+            for m in fetched_models:
+                raw_name = m.get('name', '').replace('models/', '')
+                if 'generateContent' in m.get('supportedGenerationMethods', []) and raw_name not in candidate_models:
+                    candidate_models.append(raw_name)
     except Exception as e:
-        raise Exception(f"حدث خطأ أثناء فحص النماذج: {e}")
+        print(f"[!] تنبيه: لم يتم جلب القائمة الديناميكية، سيتم الاعتماد على القائمة القياسية: {e}")
 
-    # استخدام النموذج الصالح الذي تم التقاطه
-    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط."
-    url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
     headers = {"Content-Type": "application/json"}
-    
-    for attempt in range(3):
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    # تجربة النماذج واحداً تلو الآخر حتى ينجح أحدهم
+    for model_name in candidate_models:
+        # استبعاد النماذج القديمة الموقوفة صراحة من جوجل
+        if "2.5" in model_name:
+            continue
+            
+        print(f"[+] تجربة الاتصال بالنموذج: {model_name} ...")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        
         try:
             response = requests.post(url, json=payload, headers=headers)
             data = response.json()
             
             if response.status_code == 200:
                 text = data['candidates'][0]['content']['parts'][0]['text']
+                print(f"[✓] نجاح التوليد عبر النموذج: {model_name}")
                 return text.strip()
             else:
-                print(f"المحاولة رقم {attempt + 1} فشلت بسبب رفض السيرفر: {data}")
-                time.sleep(15)
+                err_msg = data.get('error', {}).get('message', 'رفض غير معروف')
+                print(f"[-] النموذج {model_name} غير متاح ({response.status_code}): {err_msg}")
         except Exception as e:
-            print(f"المحاولة رقم {attempt + 1} فشلت بسبب خطأ اتصال: {e}")
-            time.sleep(15)
+            print(f"[-] خطأ أثناء طلب النموذج {model_name}: {e}")
             
-    raise Exception("فشل توليد النص من Gemini بعد 3 محاولات مباشرة.")
+        time.sleep(2)
+
+    raise Exception("فشل توليد النص بعد تجربة كافة النماذج المتاحة لمفتاحك.")
 
 # ==========================================
 # 2. توليد الصوت وإرفاقه سحابياً
