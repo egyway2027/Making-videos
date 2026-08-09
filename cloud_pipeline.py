@@ -9,7 +9,7 @@ from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 # إعدادات البيئة السحابية
 # ==========================================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DID_API_KEY = os.getenv("DID_API_KEY")
+HEDRA_API_KEY = os.getenv("HEDRA_API_KEY")
 AVATAR_IMAGE_URL = os.getenv("AVATAR_IMAGE_URL")
 
 # ==========================================
@@ -23,43 +23,28 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي
+# 1. توليد السكريبت المالي (اختيار النموذج الشغال)
 # ==========================================
 def generate_financial_script():
     prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط بدون عناوين."
     
     candidate_models = [
+        "gemma-2-9b-it",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemini-1.5-pro",
-        "gemini-1.0-pro",
-        "gemini-pro"
+        "gemini-1.0-pro"
     ]
     
-    try:
-        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-        resp = requests.get(list_url)
-        if resp.status_code == 200:
-            fetched_models = resp.json().get('models', [])
-            for m in fetched_models:
-                raw_name = m.get('name', '').replace('models/', '')
-                if 'generateContent' in m.get('supportedGenerationMethods', []) and raw_name not in candidate_models:
-                    candidate_models.append(raw_name)
-    except Exception as e:
-        print(f"[!] تنبيه: اعتمدنا على القائمة القياسية: {e}")
-
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
     for model_name in candidate_models:
-        if "2.5" in model_name:
-            continue
-            
         print(f"[+] تجربة الاتصال بالنموذج: {model_name} ...")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
         
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
             data = response.json()
             
             if response.status_code == 200:
@@ -77,86 +62,85 @@ def generate_financial_script():
     raise Exception("فشل توليد النص بعد تجربة كافة النماذج المتاحة لمفتاحك.")
 
 # ==========================================
-# 2. توليد الصوت ورفعه سحابياً (مع البدائل المباشرة)
+# 2. توليد الصوت آلياً
 # ==========================================
 async def generate_audio(text: str, output_path: str):
     communicate = edge_tts.Communicate(text, "ar-EG-ShakirNeural", rate="+10%")
     await communicate.save(output_path)
     validate_file(output_path, "الصوت")
 
-def upload_temp_audio(file_path: str) -> str:
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    
-    # 1. السيرفر الأول: Uguu.se (مستقر ومخصص للمطورين مع دعم ملفات الصوت المباشرة)
-    try:
-        with open(file_path, 'rb') as f:
-            response = requests.post('https://uguu.se/upload', files={'files[]': f}, headers=headers, timeout=30)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('success') and len(data.get('files', [])) > 0:
-                direct_url = data['files'][0]['url']
-                print(f"[+] تم رفع الصوت بنجاح عبر Uguu: {direct_url}")
-                return direct_url
-    except Exception as e:
-        print(f"[-] فشل Uguu: {e}")
-
-    # 2. السيرفر الثاني: Litterbox (رفع مؤقت مباشر متوافق كلياً مع D-ID)
-    try:
-        with open(file_path, 'rb') as f:
-            response = requests.post(
-                'https://litterbox.catbox.moe/resources/internals/api.php',
-                data={'reqtype': 'fileupload', 'time': '1h'},
-                files={'fileToUpload': f},
-                headers=headers,
-                timeout=30
-            )
-        if response.status_code == 200 and response.text.startswith('http'):
-            direct_url = response.text.strip()
-            print(f"[+] تم رفع الصوت بنجاح عبر Litterbox: {direct_url}")
-            return direct_url
-    except Exception as e:
-        print(f"[-] فشل Litterbox: {e}")
-
-    raise Exception("فشل رفع الصوت على جميع السيرفرات السحابية المباشرة.")
-
-
 # ==========================================
-# 3. تحريك الشخصية (D-ID)
+# 3. تحريك الشخصية بواسطة Hedra API (مباشرة دون سيرفرات وسيطة)
 # ==========================================
-def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
-    url = "https://api.d-id.com/talks"
-    headers = {"Authorization": f"Basic {DID_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "source_url": avatar_url,
-        "script": {"type": "audio", "audio_url": audio_url},
-        "config": {"fluent": "true", "pad_audio": "0.0"}
+def generate_avatar_video_hedra(audio_path: str, avatar_url: str, output_path: str):
+    headers = {
+        "X-API-KEY": HEDRA_API_KEY,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code not in [200, 201]:
-        raise Exception(f"فشل الاتصال بـ D-ID: {response.text}")
+    # 1. رفع الصوت المباشر إلى Hedra
+    print("[+] رفع ملف الصوت المباشر إلى Hedra...")
+    with open(audio_path, 'rb') as f:
+        audio_resp = requests.post("https://api.hedra.com/v1/audio", files={"file": f}, headers=headers)
+    if audio_resp.status_code not in [200, 201]:
+        raise Exception(f"فشل رفع الصوت إلى Hedra: {audio_resp.text}")
+    
+    audio_data = audio_resp.json()
+    audio_id = audio_data.get("id") or audio_data.get("audio_id")
+    print(f"[✓] تم رفع الصوت بنجاح (Audio ID: {audio_id})")
+
+    # 2. رفع صورة الشخصية إلى Hedra
+    print("[+] جاري تجهيز ورفع صورة الشخصية إلى Hedra...")
+    img_bytes = requests.get(avatar_url, timeout=30).content
+    files = {"file": ("avatar.jpg", img_bytes, "image/jpeg")}
+    
+    img_resp = requests.post("https://api.hedra.com/v1/image", files=files, headers=headers)
+    if img_resp.status_code not in [200, 201]:
+        raise Exception(f"فشل رفع الصورة إلى Hedra: {img_resp.text}")
         
-    talk_id = response.json().get("id")
-    status_url = f"https://api.d-id.com/talks/{talk_id}"
+    img_data = img_resp.json()
+    image_id = img_data.get("id") or img_data.get("image_id")
+    print(f"[✓] تم رفع الصورة بنجاح (Image ID: {image_id})")
+
+    # 3. طلب توليد فيديو تحريك الوجه
+    print("[+] بدء توليد الفيديو في Hedra...")
+    gen_payload = {
+        "audio_id": audio_id,
+        "image_id": image_id,
+        "aspect_ratio": "16:9"
+    }
     
-    print("[+] جاري معالجة الفيديو في D-ID (يرجى الانتظار دقيقة)...")
-    
+    gen_resp = requests.post(
+        "https://api.hedra.com/v1/characters", 
+        json=gen_payload, 
+        headers={"X-API-KEY": HEDRA_API_KEY, "Content-Type": "application/json"}
+    )
+    if gen_resp.status_code not in [200, 201]:
+        raise Exception(f"فشل بدء توليد الفيديو في Hedra: {gen_resp.text}")
+        
+    job_data = gen_resp.json()
+    job_id = job_data.get("job_id") or job_data.get("id")
+    print(f"[+] تم بدء عملية التوليد برقم (Job ID: {job_id})، جاري الانتظار...")
+
+    # 4. المتابعة حتى اكتمال المعالجة
+    status_url = f"https://api.hedra.com/v1/characters/{job_id}"
     while True:
-        status_response = requests.get(status_url, headers=headers)
-        status_data = status_response.json()
-        status = status_data.get("status")
-        
-        if status == "done":
-            print("[+] اكتملت المعالجة بنجاح! جاري تنزيل الفيديو الخام...")
-            vid_url = status_data.get("result_url")
-            vid_resp = requests.get(vid_url)
+        status_resp = requests.get(status_url, headers=headers)
+        res_data = status_resp.json()
+        status = res_data.get("status", "").lower()
+
+        if status in ["completed", "done", "success"]:
+            video_url = res_data.get("video_url") or res_data.get("url") or res_data.get("result_url")
+            print(f"[✓] اكتمل توليد الفيديو بنجاح! تنزيل الملف الخام...")
+            vid_bytes = requests.get(video_url).content
             with open(output_path, 'wb') as f:
-                f.write(vid_resp.content)
+                f.write(vid_bytes)
             validate_file(output_path, "الفيديو الخام")
             break
-        elif status == "error":
-            raise Exception(f"خطأ في معالجة D-ID: {status_data}")
-        
+        elif status in ["failed", "error"]:
+            raise Exception(f"فشل معالجة Hedra: {res_data}")
+
+        print("[+] المعالجة جارية في Hedra... انتظر 10 ثوانٍ.")
         time.sleep(10)
 
 # ==========================================
@@ -189,10 +173,8 @@ async def main():
     print(f"[+] النص المولد:\n{script_text}\n")
     
     await generate_audio(script_text, "audio.mp3")
-    temp_audio_url = upload_temp_audio("audio.mp3")
-    print(f"[+] رابط الصوت الجاهز للإنتاج: {temp_audio_url}")
     
-    generate_avatar_video(temp_audio_url, AVATAR_IMAGE_URL, "raw_video.mp4")
+    generate_avatar_video_hedra("audio.mp3", AVATAR_IMAGE_URL, "raw_video.mp4")
     process_video("raw_video.mp4", script_text, "final_video.mp4")
     
     print("[✓] تم الانتهاء من تصدير الفيديو النهائي بنجاح!")
