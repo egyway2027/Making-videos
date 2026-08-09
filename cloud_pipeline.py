@@ -85,7 +85,29 @@ async def generate_audio(text: str, output_path: str):
     validate_file(output_path, "الصوت")
 
 def upload_temp_audio(file_path: str) -> str:
-    # المحاولة الأولى: Tmpfiles.org (مع تحويل الرابط لمباشر)
+    # المحاولة الأولى: Catbox.moe (رابط مباشر ونقي يتوافق 100% مع D-ID)
+    try:
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://catbox.moe/user/api.php', data={'reqtype': 'fileupload'}, files={'fileToUpload': f})
+        if response.status_code == 200 and response.text.startswith('http'):
+            direct_url = response.text.strip()
+            print(f"[+] تم رفع الصوت بنجاح عبر Catbox: {direct_url}")
+            return direct_url
+    except Exception as e:
+        print(f"[-] فشل Catbox: {e}")
+
+    # المحاولة الثانية: File.io
+    try:
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://file.io', files={'file': f})
+        if response.status_code == 200:
+            direct_url = response.json()['link']
+            print(f"[+] تم رفع الصوت بنجاح عبر File.io: {direct_url}")
+            return direct_url
+    except Exception as e:
+        print(f"[-] فشل File.io: {e}")
+
+    # المحاولة الثالثة: Tmpfiles.org
     try:
         with open(file_path, 'rb') as f:
             response = requests.post('https://tmpfiles.org/api/v1/upload', files={'file': f})
@@ -98,29 +120,8 @@ def upload_temp_audio(file_path: str) -> str:
     except Exception as e:
         print(f"[-] فشل Tmpfiles: {e}")
 
-    # المحاولة الثانية: Catbox.moe
-    try:
-        with open(file_path, 'rb') as f:
-            response = requests.post('https://catbox.moe/user/api.php', data={'reqtype': 'fileupload'}, files={'fileToUpload': f})
-        if response.status_code == 200 and response.text.startswith('http'):
-            direct_url = response.text.strip()
-            print(f"[+] تم رفع الصوت بنجاح عبر Catbox: {direct_url}")
-            return direct_url
-    except Exception as e:
-        print(f"[-] فشل Catbox: {e}")
-
-    # المحاولة الثالثة: File.io
-    try:
-        with open(file_path, 'rb') as f:
-            response = requests.post('https://file.io', files={'file': f})
-        if response.status_code == 200:
-            direct_url = response.json()['link']
-            print(f"[+] تم رفع الصوت بنجاح عبر File.io: {direct_url}")
-            return direct_url
-    except Exception as e:
-        print(f"[-] فشل File.io: {e}")
-
     raise Exception("فشل رفع الصوت المؤقت على جميع السيرفرات.")
+
 
 # ==========================================
 # 3. تحريك الشخصية (D-ID)
