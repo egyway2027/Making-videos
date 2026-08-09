@@ -86,36 +86,34 @@ async def generate_audio(text: str, output_path: str):
 
 def upload_temp_audio(file_path: str) -> str:
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    filename = os.path.basename(file_path)
     
-    # 1. السيرفر الأول: 0x0.st (مباشر ومقبول 100% لدى D-ID)
+    # 1. السيرفر الأول: transfer.sh (بروتوكول PUT مخصص لبيئات السيرفرات)
     try:
         with open(file_path, 'rb') as f:
-            response = requests.post('https://0x0.st', files={'file': f}, headers=headers, timeout=30)
-        if response.status_code == 200 and response.text.startswith('http'):
+            response = requests.put(f'https://transfer.sh/{filename}', data=f, headers=headers, timeout=30)
+        if response.status_code in [200, 201] and response.text.startswith('http'):
             direct_url = response.text.strip()
-            print(f"[+] تم رفع الصوت بنجاح عبر 0x0.st: {direct_url}")
+            print(f"[+] تم رفع الصوت بنجاح عبر transfer.sh: {direct_url}")
             return direct_url
     except Exception as e:
-        print(f"[-] فشل 0x0.st: {e}")
+        print(f"[-] فشل transfer.sh: {e}")
 
-    # 2. السيرفر الثاني: Catbox.moe (مع إضافة User-Agent لتجاوز حظر GitHub)
+    # 2. السيرفر الثاني: bashupload.com (خط دفاع ثانٍ بدون حظر)
     try:
         with open(file_path, 'rb') as f:
-            response = requests.post(
-                'https://catbox.moe/user/api.php', 
-                data={'reqtype': 'fileupload'}, 
-                files={'fileToUpload': f}, 
-                headers=headers,
-                timeout=30
-            )
-        if response.status_code == 200 and response.text.startswith('http'):
-            direct_url = response.text.strip()
-            print(f"[+] تم رفع الصوت بنجاح عبر Catbox: {direct_url}")
-            return direct_url
+            response = requests.post('https://bashupload.com', files={'file': f}, headers=headers, timeout=30)
+        if response.status_code in [200, 201]:
+            for line in response.text.splitlines():
+                if 'http' in line:
+                    for word in line.split():
+                        if word.startswith('http'):
+                            print(f"[+] تم رفع الصوت بنجاح عبر bashupload: {word}")
+                            return word
     except Exception as e:
-        print(f"[-] فشل Catbox: {e}")
+        print(f"[-] فشل bashupload: {e}")
 
-    raise Exception("فشل رفع الصوت على جميع السيرفرات المباشرة.")
+    raise Exception("فشل رفع الصوت على جميع السيرفرات السحابية المباشرة.")
 
 
 # ==========================================
