@@ -27,7 +27,10 @@ def validate_file(file_path: str, file_type: str):
 # ==========================================
 def generate_financial_script():
     prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط."
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    # التعديل الجذري هنا: استخدام نموذج gemini-pro المستقر والمتاح للجميع
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    
     payload = {
         "contents": [{"parts": [{"text": prompt}]}]
     }
@@ -39,7 +42,6 @@ def generate_financial_script():
             data = response.json()
             
             if response.status_code == 200:
-                # استخراج النص بنجاح
                 text = data['candidates'][0]['content']['parts'][0]['text']
                 return text.strip()
             else:
