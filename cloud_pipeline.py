@@ -23,13 +23,39 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي (مباشرة عبر API بدون مكتبة جوجل)
+# 1. توليد السكريبت المالي (ديناميكي وذكي)
 # ==========================================
 def generate_financial_script():
-    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط."
+    print("[+] جاري فحص النماذج المتاحة لمفتاحك...")
+    list_models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
     
-    # التعديل الجذري هنا: استخدام نموذج gemini-pro المستقر والمتاح للجميع
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    try:
+        models_response = requests.get(list_models_url)
+        models_data = models_response.json()
+        
+        if models_response.status_code != 200:
+            raise Exception(f"فشل جلب قائمة النماذج. تأكد من تفعيل الخدمة في حسابك. التفاصيل: {models_data}")
+            
+        available_models = models_data.get('models', [])
+        target_model = None
+        
+        # البحث عن أول نموذج متاح يدعم توليد النصوص
+        for model in available_models:
+            if 'generateContent' in model.get('supportedGenerationMethods', []) and 'vision' not in model.get('name', ''):
+                target_model = model['name']
+                break
+                
+        if not target_model:
+            raise Exception("لم يتم العثور على أي نموذج لتوليد النصوص مسموح به لهذا المفتاح.")
+            
+        print(f"[+] تم التقاط النموذج الصالح تلقائياً: {target_model}")
+        
+    except Exception as e:
+        raise Exception(f"حدث خطأ أثناء فحص النماذج: {e}")
+
+    # استخدام النموذج الصالح الذي تم التقاطه
+    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط."
+    url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{"parts": [{"text": prompt}]}]
