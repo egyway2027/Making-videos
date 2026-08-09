@@ -3,9 +3,6 @@ import asyncio
 import requests
 import time
 import edge_tts
-from google import genai
-
-# التحديث الجديد: استدعاء MoviePy للإصدار 2.0+
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 # ==========================================
@@ -14,8 +11,6 @@ from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DID_API_KEY = os.getenv("DID_API_KEY")
 AVATAR_IMAGE_URL = os.getenv("AVATAR_IMAGE_URL")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
 # دالة الحماية وفحص الملفات
@@ -28,21 +23,33 @@ def validate_file(file_path: str, file_type: str):
     print(f"[✓] تم فحص وتأكيد سلامة ملف {file_type}.")
 
 # ==========================================
-# 1. توليد السكريبت المالي (معدل للنسخة المجانية)
+# 1. توليد السكريبت المالي (مباشرة عبر API بدون مكتبة جوجل)
 # ==========================================
 def generate_financial_script():
-    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار. أريد النص المنطوق فقط بدون عناوين."
+    prompt = "اكتب نصاً مالياً قصيراً واحترافياً لسيناريو فيديو مدته 30 ثانية عن أساسيات الاستثمار والتخطيط المالي. أريد النص المنطوق فقط."
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    headers = {"Content-Type": "application/json"}
+    
     for attempt in range(3):
         try:
-            response = client.models.generate_content(
-                model='gemini-1.5-flash',
-                contents=prompt,
-            )
-            return response.text.strip()
+            response = requests.post(url, json=payload, headers=headers)
+            data = response.json()
+            
+            if response.status_code == 200:
+                # استخراج النص بنجاح
+                text = data['candidates'][0]['content']['parts'][0]['text']
+                return text.strip()
+            else:
+                print(f"المحاولة رقم {attempt + 1} فشلت بسبب رفض السيرفر: {data}")
+                time.sleep(15)
         except Exception as e:
-            print(f"المحاولة رقم {attempt + 1} فشلت: {e}")
+            print(f"المحاولة رقم {attempt + 1} فشلت بسبب خطأ اتصال: {e}")
             time.sleep(15)
-    raise Exception("فشل توليد النص من Gemini بعد 3 محاولات.")
+            
+    raise Exception("فشل توليد النص من Gemini بعد 3 محاولات مباشرة.")
 
 # ==========================================
 # 2. توليد الصوت وإرفاقه سحابياً
@@ -80,7 +87,6 @@ def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
     
     print("[+] جاري معالجة الفيديو في D-ID (يرجى الانتظار، قد يستغرق دقيقة)...")
     
-    # حلقة آلية للانتظار حتى انتهاء رندرة الفيديو في سيرفرات D-ID
     while True:
         status_response = requests.get(status_url, headers=headers)
         status_data = status_response.json()
@@ -100,7 +106,7 @@ def generate_avatar_video(audio_url: str, avatar_url: str, output_path: str):
         time.sleep(10)
 
 # ==========================================
-# 4. المونتاج وإضافة الترجمة (MoviePy v2)
+# 4. المونتاج وإضافة الترجمة
 # ==========================================
 def process_video(raw_video: str, text_overlay: str, final_output: str):
     clip = VideoFileClip(raw_video)
